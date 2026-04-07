@@ -4,3 +4,4 @@ env_zacris/
 draft_html/
 *.pyc
 __pycache__/
+.env
