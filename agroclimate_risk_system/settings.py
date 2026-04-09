@@ -74,6 +74,7 @@ INSTALLED_APPS = [
     'apps.indicators',
     'apps.reports',
     'apps.risk',
+    'apps.ndvi_viewer',
     'rest_framework',
 ]
 

@@ -1,81 +1,117 @@
-from django.shortcuts import render
 import ee
-from datetime import datetime
+from django.shortcuts import render
+from django.http import JsonResponse
+from datetime import datetime, timedelta
 
-def satellite_view(request):
-    """Display a satellite image from Earth Engine"""
-    image = (
-        ee.ImageCollection("COPERNICUS/S2")
-        .filterDate("2025-01-01", "2025-12-31")
-        .filterBounds(ee.Geometry.Point([30.0, -1.0]))
-        .first()
+# Helper: Zimbabwe boundary from FAO GAUL 2015 (reliable asset)
+def get_zimbabwe_boundary():
+    return (
+        ee.FeatureCollection("FAO/GAUL/2015/level0")
+        .filter(ee.Filter.eq("ADM0_NAME", "Malawi"))
+        .geometry()
     )
 
-    try:
-        info = image.getInfo()
+def get_country_centroid():
+    bounds = get_zimbabwe_boundary()
+    centroid = bounds.centroid().coordinates().getInfo()
+    return {'lat': centroid[1], 'lng': centroid[0]}
 
-        # Extract bands
-        bands_list = []
-        if "bands" in info:
-            for band in info["bands"]:
-                bands_list.append(band.get("id", "unknown"))
+def _get_default_date():
+    """Return a date string that definitely has MODIS data (e.g., 2024-02-01)."""
+    return "2024-02-01"
 
-        # Convert timestamp to readable date
-        timestamp = info.get("properties", {}).get("GENERATION_TIME")
-        if timestamp:
-            # Convert milliseconds to datetime
-            readable_date = datetime.fromtimestamp(timestamp / 1000).strftime(
-                "%Y-%m-%d %H:%M:%S"
+# ========== NDVI (MODIS 16-day composite) ==========
+def ndvi_map(request):
+    # AJAX request: return tile URL for a given date
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        date = request.GET.get('date')
+        if not date:
+            return JsonResponse({'error': 'Missing date parameter'}, status=400)
+        try:
+            # Use the exact working logic from your code
+            zimbabwe = get_zimbabwe_boundary()
+            image = (
+                ee.ImageCollection("MODIS/061/MOD13A2")
+                .filterDate(date, ee.Date(date).advance(16, "day"))
+                .select("NDVI")
+                .mean()
+                .multiply(0.0001)
+                .clip(zimbabwe)
             )
-        else:
-            readable_date = "Unknown"
+            vis_params = {"min": 0, "max": 1, "palette": ["brown", "yellow", "green"]}
+            map_id = image.getMapId(vis_params)
+            return JsonResponse({"tile_url": map_id["tile_fetcher"].url_format})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
 
-        context = {
-            "image_id": info.get("id", "Unknown"),
-            "bands": bands_list,
-            "date": readable_date,
-            "cloud_cover": info.get("properties", {}).get(
-                "CLOUDY_PIXEL_PERCENTAGE", "N/A"
-            ),
-        }
-    except Exception as e:
-        context = {"error": str(e)}
+    # Normal page load
+    default_date = _get_default_date()
+    context = {
+        'indicator_name': 'NDVI (Normalized Difference Vegetation Index)',
+        'description': 'MODIS 16-day composite, 1km resolution. Values 0–1 (vegetation density).',
+        'center_lat': get_country_centroid()['lat'],
+        'center_lng': get_country_centroid()['lng'],
+        'default_date': default_date,
+    }
+    return render(request, 'indicators/indicator_map.html', context)
 
+# ========== Soil Moisture (ERA5-Land daily) ==========
+def soil_moisture_map(request):
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        date = request.GET.get('date')
+        if not date:
+            return JsonResponse({'error': 'Missing date parameter'}, status=400)
+        try:
+            zimbabwe = get_zimbabwe_boundary()
+            # Soil moisture from ERA5-Land (volumetric soil water layer 1)
+            image = (
+                ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR")
+                .filterDate(date, ee.Date(date).advance(1, "day"))
+                .select("volumetric_soil_water_layer_1")
+                .mean()
+                .clip(zimbabwe)
+            )
+            vis_params = {"min": 0, "max": 0.5, "palette": ["brown", "orange", "lightblue", "blue"]}
+            map_id = image.getMapId(vis_params)
+            return JsonResponse({"tile_url": map_id["tile_fetcher"].url_format})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
 
-    return render(request, "satellite.html", context)
+    context = {
+        'indicator_name': 'Soil Moisture (Volumetric Water)',
+        'description': 'ERA5-Land daily average, 0–0.5 m³/m³.',
+        'center_lat': get_country_centroid()['lat'],
+        'center_lng': get_country_centroid()['lng'],
+        'default_date': _get_default_date(),
+    }
+    return render(request, 'indicators/indicator_map.html', context)
 
+# ========== Temperature (ERA5-Land 2m air temperature) ==========
+def temperature_map(request):
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        date = request.GET.get('date')
+        if not date:
+            return JsonResponse({'error': 'Missing date parameter'}, status=400)
+        try:
+            zimbabwe = get_zimbabwe_boundary()
+            image = (
+                ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR")
+                .filterDate(date, ee.Date(date).advance(1, "day"))
+                .select("temperature_2m")
+                .mean()
+                .clip(zimbabwe)
+            )
+            vis_params = {"min": 290, "max": 310, "palette": ["blue", "yellow", "red"]}
+            map_id = image.getMapId(vis_params)
+            return JsonResponse({"tile_url": map_id["tile_fetcher"].url_format})
+        except Exception as e:
+            return JsonResponse({"error": str(e)}, status=500)
 
-# View to display rainfall raster
-def rainfall_raster(request):
-    """Display CHIRPS daily rainfall raster for Malawi"""
-    try:
-        # Use daily CHIRPS with a single date
-        rainfall = (
-            ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
-            .filterDate("2023-03-20", "2023-03-21")
-            .select("precipitation")
-            .mean()
-        )
-
-        # Clip to Malawi
-        malawi = ee.Geometry.Polygon(
-            [[[32.7, -17.1], [35.9, -17.1], [35.9, -9.4], [32.7, -9.4], [32.7, -17.1]]]
-        )
-        rainfall_clipped = rainfall.clip(malawi)
-
-        # Visualization
-        vis_params = {
-            "min": 0,
-            "max": 60,
-            "palette": ["ffffcc", "a1dab4", "41b6c4", "2c7fb8", "253494"],
-        }
-
-        map_id = rainfall_clipped.getMapId(vis_params)
-        tile_url = map_id["tile_fetcher"].url_format
-
-        context = {"tile_url": tile_url, "date": "March 20, 2023"}
-
-    except Exception as e:
-        context = {"error": str(e)}
-
-    return render(request, "rainfall.html", context)
+    context = {
+        'indicator_name': '2m Air Temperature (Kelvin)',
+        'description': 'ERA5-Land daily mean temperature (290K ≈ 17°C, 310K ≈ 37°C).',
+        'center_lat': get_country_centroid()['lat'],
+        'center_lng': get_country_centroid()['lng'],
+        'default_date': _get_default_date(),
+    }
+    return render(request, 'indicators/indicator_map.html', context)
