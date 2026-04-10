@@ -1,13 +1,16 @@
+# apps/gee/views.py
+
 import ee
 from django.shortcuts import render
 from django.http import JsonResponse
-from apps.gee.boundary_utils import get_country_centroid
+from apps.gee.boundary_utils import get_country_centroid, get_all_countries
 from apps.gee.ndvi import get_ndvi
 from apps.gee.soil_moisture import get_soil_moisture
 from apps.gee.temperature import get_temperature
 from apps.gee.rainfall import get_rainfall 
 
 def _get_tile_url(image, vis_params):
+    """Helper: get tile URL from an EE image."""
     map_id = image.getMapId(vis_params)
     return map_id["tile_fetcher"].url_format
 
@@ -26,7 +29,17 @@ def ndvi_map(request):
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
     
-    centroid = get_country_centroid(country)
+    # Get centroid for the selected country
+    try:
+        centroid = get_country_centroid(country)
+    except Exception:
+        # Fallback to Zimbabwe if country not found
+        centroid = get_country_centroid("Zimbabwe")
+        country = "Zimbabwe"
+    
+    # Get all countries from FAO GAUL asset
+    countries_list = get_all_countries()
+    
     context = {
         'indicator_name': 'NDVI (Normalized Difference Vegetation Index)',
         'description': 'MODIS 16-day composite, 1km resolution. Average over selected date range.',
@@ -38,6 +51,7 @@ def ndvi_map(request):
         'legend_max': 1,
         'legend_palette': ["brown", "yellow", "green"],
         'selected_country': country,
+        'countries_list': countries_list,
     }
     return render(request, 'indicators/indicator_map.html', context)
 
@@ -56,7 +70,14 @@ def soil_moisture_map(request):
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
     
-    centroid = get_country_centroid(country)
+    try:
+        centroid = get_country_centroid(country)
+    except Exception:
+        centroid = get_country_centroid("Zimbabwe")
+        country = "Zimbabwe"
+    
+    countries_list = get_all_countries()
+    
     context = {
         'indicator_name': 'Soil Moisture (Volumetric Water)',
         'description': 'ERA5-Land daily average, 0–0.5 m³/m³. Average over selected date range.',
@@ -68,6 +89,7 @@ def soil_moisture_map(request):
         'legend_max': 0.5,
         'legend_palette': ["brown", "orange", "lightblue", "blue"],
         'selected_country': country,
+        'countries_list': countries_list,
     }
     return render(request, 'indicators/indicator_map.html', context)
 
@@ -86,7 +108,14 @@ def temperature_map(request):
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
     
-    centroid = get_country_centroid(country)
+    try:
+        centroid = get_country_centroid(country)
+    except Exception:
+        centroid = get_country_centroid("Zimbabwe")
+        country = "Zimbabwe"
+    
+    countries_list = get_all_countries()
+    
     context = {
         'indicator_name': '2m Air Temperature (Kelvin)',
         'description': 'ERA5-Land daily mean temperature. Average over selected date range.',
@@ -98,6 +127,7 @@ def temperature_map(request):
         'legend_max': 310,
         'legend_palette': ["blue", "yellow", "red"],
         'selected_country': country,
+        'countries_list': countries_list,
     }
     return render(request, 'indicators/indicator_map.html', context)
 
@@ -116,7 +146,14 @@ def rainfall_map(request):
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
     
-    centroid = get_country_centroid(country)
+    try:
+        centroid = get_country_centroid(country)
+    except Exception:
+        centroid = get_country_centroid("Zimbabwe")
+        country = "Zimbabwe"
+    
+    countries_list = get_all_countries()
+    
     context = {
         'indicator_name': 'Rainfall (Daily Precipitation)',
         'description': 'CHIRPS daily precipitation, mm/day. Average over selected date range.',
@@ -128,5 +165,6 @@ def rainfall_map(request):
         'legend_max': 20,
         'legend_palette': ["white", "lightblue", "blue", "darkblue"],
         'selected_country': country,
+        'countries_list': countries_list,
     }
     return render(request, 'indicators/indicator_map.html', context)

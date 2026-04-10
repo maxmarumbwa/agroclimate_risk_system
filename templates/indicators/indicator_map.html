@@ -66,21 +66,21 @@
         <h1>{{ indicator_name }}</h1>
         <p>{{ description }}</p>
     </div>
+    
     <div class="controls">
         <label>Country:
             <select id="country_select">
-                <option value="Zimbabwe" {% if selected_country == "Zimbabwe" %}selected{% endif %}>Zimbabwe</option>
-                <option value="South Africa" {% if selected_country == "South Africa" %}selected{% endif %}>South Africa</option>
-                <option value="Zambia" {% if selected_country == "Zambia" %}selected{% endif %}>Zambia</option>
-                <option value="Mozambique" {% if selected_country == "Mozambique" %}selected{% endif %}>Mozambique</option>
-                <option value="Botswana" {% if selected_country == "Botswana" %}selected{% endif %}>Botswana</option>
-                <option value="Namibia" {% if selected_country == "Namibia" %}selected{% endif %}>Namibia</option>
-                <!-- Add more countries as needed -->
+                {% for country_name in countries_list %}
+                    <option value="{{ country_name }}" {% if selected_country == country_name %}selected{% endif %}>
+                        {{ country_name }}
+                    </option>
+                {% endfor %}
             </select>
         </label>
         <label>Start: <input type="date" id="start_date" value="{{ default_start }}"></label>
         <label>End: <input type="date" id="end_date" value="{{ default_end }}"></label>
     </div>
+
     <div id="map"></div>
     <div class="loading" id="loading">Loading map tiles...</div>
     <div class="error-msg" id="errorMsg"></div>
