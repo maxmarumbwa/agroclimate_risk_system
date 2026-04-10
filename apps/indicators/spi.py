@@ -1,5 +1,29 @@
 import ee
+from apps.gee.boundary_utils import get_country_boundary
 
-def compute_spi(rainfall, mean_rainfall, std_dev):
-    """Standardised Precipitation Index (simplified)."""
-    return rainfall.subtract(mean_rainfall).divide(std_dev)
+def compute_spi(start_date, end_date, country="Zimbabwe"):
+    boundary = get_country_boundary(country)
+
+    from apps.gee.rainfall import get_rainfall
+    rainfall_target = get_rainfall(start_date, end_date, country)
+
+    # Historical period (CHIRPS from 1981)
+    hist_start = ee.Date('1981-01-01')
+    hist_end = ee.Date('2023-12-31')
+    collection = (ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")
+                  .filterDate(hist_start, hist_end)
+                  .select("precipitation"))
+
+    start_md = ee.Date(start_date).getRelative('day', 'year')
+    end_md = ee.Date(end_date).getRelative('day', 'year')
+    filtered = collection.filter(ee.Filter.calendarRange(start_md, end_md, 'day_of_year'))
+
+    size = filtered.size().getInfo()
+    if size == 0:
+        raise ValueError(f"No historical rainfall data for {country} from {start_date} to {end_date}")
+
+    mean_rain = filtered.mean().clip(boundary)
+    std_rain = filtered.reduce(ee.Reducer.stdDev()).add(0.001).clip(boundary)  # epsilon added
+
+    spi = rainfall_target.subtract(mean_rain).divide(std_rain)
+    return spi

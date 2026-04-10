@@ -9,4 +9,6 @@ urlpatterns = [
     path('soil-moisture/', views.soil_moisture_map, name='soil_moisture_map'),
     path('temperature/', views.temperature_map, name='temperature_map'),
     path('rainfall/', views.rainfall_map, name='rainfall_map'),
+    path('risk/', views.risk_map, name='risk_map'),
+    path('indices/', views.index_map, name='index_map'),
 ]
