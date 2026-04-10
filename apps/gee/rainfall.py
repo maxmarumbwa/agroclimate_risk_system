@@ -1,3 +1,4 @@
+import ee
 def get_rainfall(start_date, end_date):
     """
     Return EE Image (daily precipitation, average over range).
