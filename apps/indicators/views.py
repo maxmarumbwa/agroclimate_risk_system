@@ -1,3 +1,5 @@
+# apps/gee/views.py
+
 import ee
 from django.shortcuts import render
 from django.http import JsonResponse
@@ -6,7 +8,6 @@ from apps.gee.ndvi import get_ndvi
 from apps.gee.soil_moisture import get_soil_moisture
 from apps.gee.temperature import get_temperature
 from apps.gee.rainfall import get_rainfall 
-
 
 def _get_tile_url(image, vis_params):
     """Helper: get tile URL from an EE image."""
@@ -27,7 +28,6 @@ def ndvi_map(request):
         except Exception as e:
             return JsonResponse({"error": str(e)}, status=500)
     
-    # HTML render
     context = {
         'indicator_name': 'NDVI (Normalized Difference Vegetation Index)',
         'description': 'MODIS 16-day composite, 1km resolution. Average over selected date range.',
@@ -35,6 +35,10 @@ def ndvi_map(request):
         'center_lng': get_country_centroid()['lng'],
         'default_start': "2024-02-01",
         'default_end': "2024-02-16",
+        # Legend data
+        'legend_min': 0,
+        'legend_max': 1,
+        'legend_palette': ["brown", "yellow", "green"],
     }
     return render(request, 'indicators/indicator_map.html', context)
 
@@ -59,6 +63,9 @@ def soil_moisture_map(request):
         'center_lng': get_country_centroid()['lng'],
         'default_start': "2024-02-01",
         'default_end': "2024-02-02",
+        'legend_min': 0,
+        'legend_max': 0.5,
+        'legend_palette': ["brown", "orange", "lightblue", "blue"],
     }
     return render(request, 'indicators/indicator_map.html', context)
 
@@ -83,11 +90,13 @@ def temperature_map(request):
         'center_lng': get_country_centroid()['lng'],
         'default_start': "2024-02-01",
         'default_end': "2024-02-02",
+        'legend_min': 290,
+        'legend_max': 310,
+        'legend_palette': ["blue", "yellow", "red"],
     }
     return render(request, 'indicators/indicator_map.html', context)
 
-# ========== RAINFALL  VIEW ==========
-
+# ========== RAINFALL VIEW ==========
 def rainfall_map(request):
     start_date = request.GET.get('start_date')
     end_date = request.GET.get('end_date')
@@ -95,7 +104,6 @@ def rainfall_map(request):
     if start_date and end_date:
         try:
             image = get_rainfall(start_date, end_date)
-            # CHIRPS precipitation is in mm/day; typical range 0-50mm (adjust as needed)
             vis_params = {"min": 0, "max": 20, "palette": ["white", "lightblue", "blue", "darkblue"]}
             tile_url = _get_tile_url(image, vis_params)
             return JsonResponse({"tile_url": tile_url})
@@ -109,5 +117,8 @@ def rainfall_map(request):
         'center_lng': get_country_centroid()['lng'],
         'default_start': "2024-01-01",
         'default_end': "2024-01-31",
+        'legend_min': 0,
+        'legend_max': 20,
+        'legend_palette': ["white", "lightblue", "blue", "darkblue"],
     }
     return render(request, 'indicators/indicator_map.html', context)
