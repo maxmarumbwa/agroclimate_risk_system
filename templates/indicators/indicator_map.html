@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ indicator_name }} - Zimbabwe</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        body { margin: 0; padding: 0; font-family: Arial, sans-serif; }
+        #map { height: 75vh; width: 100%; }
+        .info-panel {
+            position: absolute; top: 10px; right: 10px; background: white;
+            padding: 10px 15px; border-radius: 8px; z-index: 1000;
+            max-width: 300px; box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        .date-controls {
+            position: absolute; top: 10px; left: 10px; background: white;
+            padding: 10px; border-radius: 5px; z-index: 1000;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .loading {
+            position: absolute; bottom: 20px; left: 20px; background: white;
+            padding: 5px 10px; border-radius: 5px; z-index: 1000;
+            font-size: 12px; display: none;
+        }
+        .error-msg {
+            position: absolute; bottom: 20px; right: 20px; background: #f8d7da;
+            color: #721c24; padding: 5px 10px; border-radius: 5px;
+            font-size: 12px; z-index: 1000; display: none;
+        }
+        /* Legend styling */
+        .legend {
+            background: white;
+            padding: 8px 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 8px rgba(0,0,0,0.2);
+            font-size: 12px;
+            line-height: 1.4;
+            min-width: 130px;
+        }
+        .legend h4 {
+            margin: 0 0 6px 0;
+            font-size: 13px;
+            font-weight: bold;
+            text-align: center;
+        }
+        .legend-bar {
+            width: 100%;
+            height: 12px;
+            border-radius: 3px;
+            margin: 5px 0;
+        }
+        .legend-labels {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 4px;
+            font-size: 11px;
+        }
+    </style>
+</head>
+<body>
+    <div class="info-panel">
+        <h1>{{ indicator_name }}</h1>
+        <p>{{ description }}</p>
+    </div>
+    <div class="date-controls">
+        <label>Start: <input type="date" id="start_date" value="{{ default_start }}"></label>
+        <label>End: <input type="date" id="end_date" value="{{ default_end }}"></label>
+    </div>
+    <div id="map"></div>
+    <div class="loading" id="loading">Loading map tiles...</div>
+    <div class="error-msg" id="errorMsg"></div>
+
+    {{ legend_palette|json_script:"legendPalette" }}
+
+    <script>
+        function showError(msg) {
+            const errDiv = document.getElementById('errorMsg');
+            errDiv.textContent = msg;
+            errDiv.style.display = 'block';
+            setTimeout(() => errDiv.style.display = 'none', 5000);
+        }
+
+        const mapContainer = document.getElementById('map');
+        if (!mapContainer) {
+            showError('Map container missing');
+        } else {
+            // Initialize map
+            const map = L.map('map').setView([{{ center_lat }}, {{ center_lng }}], 6);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> & CartoDB'
+            }).addTo(map);
+
+            // ----- Detailed Legend -----
+            const minVal = {{ legend_min }};
+            const maxVal = {{ legend_max }};
+            const paletteElem = document.getElementById('legendPalette');
+            let palette = ['#ccc']; // fallback
+            if (paletteElem) {
+                try { palette = JSON.parse(paletteElem.textContent); } catch(e) { console.warn(e); }
+            }
+
+            // Create a gradient CSS string
+            const gradientCss = `linear-gradient(to right, ${palette.join(', ')})`;
+
+            // Choose 3–5 labels: min, mid, max, plus optional quartiles
+            const range = maxVal - minVal;
+            const labels = [
+                { pos: '0%', val: minVal },
+                { pos: '25%', val: minVal + range * 0.25 },
+                { pos: '50%', val: minVal + range * 0.5 },
+                { pos: '75%', val: minVal + range * 0.75 },
+                { pos: '100%', val: maxVal }
+            ];
+
+            const legendHtml = `
+                <div class="legend">
+                    <h4>${'{{ indicator_name }}'.split('(')[0].trim()}</h4>
+                    <div class="legend-bar" style="background: ${gradientCss};"></div>
+                    <div class="legend-labels">
+                        ${labels.map(l => `<span style="position:relative; left:${l.pos};">${l.val.toFixed(1)}</span>`).join('')}
+                    </div>
+                </div>
+            `;
+
+            const LegendControl = L.Control.extend({
+                onAdd: function() {
+                    const div = L.DomUtil.create('div');
+                    div.innerHTML = legendHtml;
+                    return div;
+                }
+            });
+            new LegendControl({ position: 'bottomright' }).addTo(map);
+            // ---------------------------
+
+            let indicatorLayer = null;
+            let updateTimeout = null;
+
+            function updateMap() {
+                const start = document.getElementById('start_date').value;
+                const end = document.getElementById('end_date').value;
+                if (!start || !end) return;
+                if (start > end) {
+                    showError("Start date must be ≤ end date");
+                    return;
+                }
+
+                document.getElementById('loading').style.display = 'block';
+                fetch(`${window.location.pathname}?start_date=${start}&end_date=${end}`)
+                    .then(res => {
+                        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                        return res.json();
+                    })
+                    .then(data => {
+                        document.getElementById('loading').style.display = 'none';
+                        if (data.error) throw new Error(data.error);
+                        if (indicatorLayer) map.removeLayer(indicatorLayer);
+                        indicatorLayer = L.tileLayer(data.tile_url, { opacity: 0.8 }).addTo(map);
+                    })
+                    .catch(err => {
+                        document.getElementById('loading').style.display = 'none';
+                        console.error(err);
+                        showError("Failed to load map: " + err.message);
+                    });
+            }
+
+            function debouncedUpdate() {
+                if (updateTimeout) clearTimeout(updateTimeout);
+                updateTimeout = setTimeout(updateMap, 500);
+            }
+
+            document.getElementById('start_date').addEventListener('change', debouncedUpdate);
+            document.getElementById('end_date').addEventListener('change', debouncedUpdate);
+            updateMap(); // initial load
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AgroRisk Map</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <style>
+        #map { height: 600px; }
+        .controls { padding: 10px; background: #f0f0f0; }
+    </style>
+</head>
+<body>
+    <div class="controls">
+        <label>Start date: <input type="date" id="start" value="2024-01-01"></label>
+        <label>End date: <input type="date" id="end" value="2024-02-01"></label>
+        <button id="update">Update Risk Map</button>
+    </div>
+    <div id="map"></div>
+    <script>
+        var map = L.map('map').setView([20, 78], 5);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> & CartoDB'
+        }).addTo(map);
+
+        var riskLayer = null;
+
+        function updateMap() {
+            var start = document.getElementById('start').value;
+            var end = document.getElementById('end').value;
+            var url = `/api/agro-risk-map/?start_date=${start}&end_date=${end}`;
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (riskLayer) map.removeLayer(riskLayer);
+                    riskLayer = L.tileLayer(data.tile_url, {
+                        opacity: 0.7,
+                        minZoom: 1,
+                        maxZoom: 10
+                    }).addTo(map);
+                })
+                .catch(err => console.error(err));
+        }
+
+        document.getElementById('update').addEventListener('click', updateMap);
+        updateMap();  // initial load
+    </script>
+</body>
+</html>

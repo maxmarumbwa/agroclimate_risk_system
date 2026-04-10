@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MODIS NDVI Mean (16‑day, 1km)</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: 'Segoe UI', Roboto, sans-serif;
+            background: #eef2f5;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .card {
+            max-width: 900px;
+            width: 100%;
+            background: white;
+            border-radius: 32px;
+            padding: 28px 32px;
+            box-shadow: 0 20px 35px -12px rgba(0,0,0,0.15);
+        }
+        h1 {
+            color: #1b4e5e;
+            margin: 0 0 6px;
+        }
+        .sub {
+            color: #4f6f7e;
+            border-left: 4px solid #5fa3b5;
+            padding-left: 14px;
+            margin-bottom: 28px;
+        }
+        .date-range {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 30px;
+            margin-bottom: 25px;
+        }
+        .date-box {
+            flex: 1;
+            background: #f8fafc;
+            border-radius: 24px;
+            padding: 18px;
+        }
+        .date-box h3 {
+            margin: 0 0 12px;
+            font-size: 1.1rem;
+            color: #1f5e72;
+        }
+        .row {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .field {
+            flex: 1;
+            min-width: 90px;
+        }
+        label {
+            font-weight: 600;
+            font-size: 0.75rem;
+            color: #2c6e82;
+            display: block;
+            margin-bottom: 4px;
+        }
+        select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 30px;
+            border: 1px solid #cbdae2;
+            background: white;
+            font-size: 0.9rem;
+        }
+        button {
+            background: #1f7a5a;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 40px;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            width: 100%;
+            transition: 0.2s;
+            margin-top: 8px;
+        }
+        button:hover { background: #0e5e44; transform: scale(0.98); }
+        .result {
+            background: #ffffff;
+            border-radius: 24px;
+            padding: 20px;
+            border: 1px solid #e2edf2;
+            margin-top: 24px;
+        }
+        .mean-value {
+            font-size: 2.5rem;
+            font-weight: 800;
+            color: #1b7e4a;
+            background: #e2f3e9;
+            display: inline-block;
+            padding: 8px 24px;
+            border-radius: 60px;
+        }
+        .step-list {
+            background: #f4f9fc;
+            padding: 12px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            margin-top: 16px;
+        }
+        .warning {
+            background: #fff0db;
+            border-left: 5px solid #e6a017;
+            padding: 12px 18px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            margin-top: 20px;
+        }
+        .loading { color: #2c7a4a; }
+        .error { color: #c0392b; }
+    </style>
+</head>
+<body>
+<div class="card">
+    <h1>🛰️ MODIS NDVI (MOD13A1, 1km, 16‑day)</h1>
+    <div class="sub">Select a date range → computes mean NDVI over overlapping composites</div>
+
+    <div class="date-range">
+        <div class="date-box">
+            <h3>📅 START DATE</h3>
+            <div id="startControls" class="row"></div>
+        </div>
+        <div class="date-box">
+            <h3>📅 END DATE</h3>
+            <div id="endControls" class="row"></div>
+        </div>
+    </div>
+
+    <button id="computeBtn">🌿 COMPUTE MEAN NDVI</button>
+
+    <div id="resultArea" class="result">
+        <div id="resultMessage">Select a start and end date, then click compute.</div>
+    </div>
+    <div class="warning">
+        ⚡ <strong>API integration</strong> – Currently uses a <strong>mock NDVI API</strong> (realistic values). 
+        Replace <code>fetch_ndvi_for_step()</code> in <code>utils.py</code> with a real MODIS API (NASA Earthdata, AppEEARS, etc.).
+    </div>
+</div>
+
+<script>
+    // Helper: days in month
+    function getDaysInMonth(year, month) {
+        return new Date(year, month, 0).getDate();
+    }
+
+    // Create a set of dropdowns for a given container and initial values
+    function createDateSelectors(containerId, initYear, initMonth, initDay) {
+        const container = document.getElementById(containerId);
+        container.innerHTML = `
+            <div class="field"><label>YEAR</label><select class="yearSel"></select></div>
+            <div class="field"><label>MONTH</label><select class="monthSel"></select></div>
+            <div class="field"><label>DAY</label><select class="daySel"></select></div>
+        `;
+        const yearSel = container.querySelector('.yearSel');
+        const monthSel = container.querySelector('.monthSel');
+        const daySel = container.querySelector('.daySel');
+
+        // populate years 2000–2040
+        for (let y = 2000; y <= 2040; y++) {
+            const opt = document.createElement('option');
+            opt.value = y;
+            opt.textContent = y;
+            yearSel.appendChild(opt);
+        }
+        yearSel.value = initYear;
+
+        // months
+        for (let m = 1; m <= 12; m++) {
+            const opt = document.createElement('option');
+            opt.value = m;
+            opt.textContent = new Date(2000, m-1, 1).toLocaleString('default', { month: 'long' });
+            monthSel.appendChild(opt);
+        }
+        monthSel.value = initMonth;
+
+        function updateDays() {
+            const y = parseInt(yearSel.value);
+            const m = parseInt(monthSel.value);
+            const days = getDaysInMonth(y, m);
+            daySel.innerHTML = '';
+            for (let d = 1; d <= days; d++) {
+                const opt = document.createElement('option');
+                opt.value = d;
+                opt.textContent = d;
+                daySel.appendChild(opt);
+            }
+            let currentDay = initDay;
+            if (currentDay > days) currentDay = days;
+            daySel.value = currentDay;
+        }
+
+        yearSel.addEventListener('change', updateDays);
+        monthSel.addEventListener('change', updateDays);
+        updateDays();
+
+        return { yearSel, monthSel, daySel };
+    }
+
+    // initialise selectors
+    const startSelectors = createDateSelectors('startControls', 2000, 2, 18);
+    const endSelectors = createDateSelectors('endControls', 2000, 12, 1);
+
+    function getSelectedDate(selectors) {
+        const year = parseInt(selectors.yearSel.value);
+        const month = parseInt(selectors.monthSel.value);
+        const day = parseInt(selectors.daySel.value);
+        return `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+    }
+
+    const computeBtn = document.getElementById('computeBtn');
+    const resultDiv = document.getElementById('resultMessage');
+
+    computeBtn.addEventListener('click', async () => {
+        const startDate = getSelectedDate(startSelectors);
+        const endDate = getSelectedDate(endSelectors);
+        resultDiv.innerHTML = '<span class="loading">⏳ Computing mean NDVI...</span>';
+        try {
+            const response = await fetch('/api/compute-mean-ndvi/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ start_date: startDate, end_date: endDate })
+            });
+            const data = await response.json();
+            if (data.error) {
+                resultDiv.innerHTML = `<span class="error">❌ ${data.error}</span>`;
+                return;
+            }
+            // display result
+            let stepsHtml = '<div class="step-list"><strong>📊 Steps included:</strong><ul>';
+            data.steps_used.forEach(s => {
+                stepsHtml += `<li>Step ${s.step_id} (${s.period}) → NDVI = ${s.ndvi}</li>`;
+            });
+            stepsHtml += '</ul></div>';
+            resultDiv.innerHTML = `
+                <div style="text-align: center;">
+                    <div class="mean-value">🌿 ${data.mean_ndvi}</div>
+                    <div style="margin-top: 12px;"><strong>Mean NDVI</strong> over ${data.num_steps} composite(s)</div>
+                </div>
+                ${stepsHtml}
+            `;
+        } catch (err) {
+            resultDiv.innerHTML = `<span class="error">Network error: ${err.message}</span>`;
+        }
+    });
+</script>
+</body>
+</html>
