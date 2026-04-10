@@ -1,11 +1,11 @@
 import ee
+from .boundary_utils import get_country_boundary
 
-def get_temperature(start_date, end_date):
+def get_temperature(start_date, end_date, country="Zimbabwe"):
     """
     Return EE Image (2m air temperature, average over range).
     """
-    from .boundary_utils import get_zimbabwe_boundary
-    boundary = get_zimbabwe_boundary()
+    boundary = get_country_boundary(country)
     
     collection = (
         ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR")

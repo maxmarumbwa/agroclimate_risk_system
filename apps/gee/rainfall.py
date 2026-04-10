@@ -1,11 +1,12 @@
 import ee
-def get_rainfall(start_date, end_date):
+from .boundary_utils import get_country_boundary
+
+def get_rainfall(start_date, end_date, country="Zimbabwe"):
     """
     Return EE Image (daily precipitation, average over range).
     Uses CHIRPS daily dataset.
     """
-    from .boundary_utils import get_zimbabwe_boundary
-    boundary = get_zimbabwe_boundary()
+    boundary = get_country_boundary(country)
     
     collection = (
         ee.ImageCollection("UCSB-CHG/CHIRPS/DAILY")

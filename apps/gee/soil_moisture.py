@@ -1,11 +1,11 @@
 import ee
+from .boundary_utils import get_country_boundary
 
-def get_soil_moisture(start_date, end_date):
+def get_soil_moisture(start_date, end_date, country="Zimbabwe"):
     """
     Return EE Image (volumetric soil water layer 1, average over range).
     """
-    from .boundary_utils import get_zimbabwe_boundary
-    boundary = get_zimbabwe_boundary()
+    boundary = get_country_boundary(country)
     
     collection = (
         ee.ImageCollection("ECMWF/ERA5_LAND/DAILY_AGGR")

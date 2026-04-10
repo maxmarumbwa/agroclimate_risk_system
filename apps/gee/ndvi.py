@@ -1,13 +1,12 @@
 import ee
+from .boundary_utils import get_country_boundary
 
-def get_ndvi(start_date, end_date):
+def get_ndvi(start_date, end_date, country="Zimbabwe"):
     """
-    Return an EE Image (NDVI averaged over date range, scaled 0-1).
+    Return EE Image (NDVI averaged over date range, scaled 0-1).
     Raises ValueError if no data found.
     """
-
-    from .boundary_utils import get_zimbabwe_boundary
-    boundary = get_zimbabwe_boundary()
+    boundary = get_country_boundary(country)
     
     collection = (
         ee.ImageCollection("MODIS/061/MOD13A2")
@@ -18,6 +17,5 @@ def get_ndvi(start_date, end_date):
     if size == 0:
         raise ValueError(f"No NDVI data found from {start_date} to {end_date}")
     
-    # Mean then scale
     image = collection.mean().multiply(0.0001).clip(boundary)
     return image
